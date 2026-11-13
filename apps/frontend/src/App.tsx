@@ -11,8 +11,30 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 1000 * 60 * 5, // 5 minutes
-      retry: 1,
+      retry: (failureCount, error: unknown) => {
+        // Don't retry on 4xx errors (client errors - validation, auth, etc.)
+        if (error instanceof Error && 'status' in error) {
+          const status = (error as { status?: number }).status;
+          if (status && status >= 400 && status < 500) {
+            return false;
+          }
+        }
+        // Retry up to 1 time for network errors or 5xx server errors
+        return failureCount < 1;
+      },
       refetchOnWindowFocus: false,
+    },
+    mutations: {
+      retry: (failureCount, error: unknown) => {
+        // Don't retry mutations on 4xx errors
+        if (error instanceof Error && 'status' in error) {
+          const status = (error as { status?: number }).status;
+          if (status && status >= 400 && status < 500) {
+            return false;
+          }
+        }
+        return failureCount < 1;
+      },
     },
   },
 });

@@ -8,7 +8,7 @@ import { ProgressBar } from '../components/ui/ProgressBar';
 import { EmptyState } from '../components/ui/EmptyState';
 
 export function DashboardPage() {
-  const { data: equipmentData, isLoading: equipmentLoading } = useEquipment({ limit: 1000 });
+  const { data: equipmentData, isLoading: equipmentLoading } = useEquipment({ limit: 100 });
   const { data: equipmentTypesData } = useEquipmentTypes({ limit: 100 });
   const { data: maintenanceData, isLoading: maintenanceLoading } = useMaintenance({ limit: 10 });
 

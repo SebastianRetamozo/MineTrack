@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
@@ -28,28 +28,73 @@ export function EquipmentForm({
     code: '',
     equipmentTypeId: '',
     horometer: 0,
-    appliedIntervalHours: '',
+    appliedIntervalHours: 0,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const isEditing = !!initialData;
 
+  // Sync form data when initialData changes (for editing)
+  useEffect(() => {
+    if (initialData) {
+      setFormData({
+        code: initialData.code,
+        equipmentTypeId: initialData.equipmentTypeId,
+        horometer: initialData.horometer,
+        appliedIntervalHours: initialData.appliedIntervalHours,
+      });
+    } else {
+      setFormData({
+        code: '',
+        equipmentTypeId: '',
+        horometer: 0,
+        appliedIntervalHours: 0,
+      });
+    }
+    setErrors({});
+  }, [initialData]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    // Convert number fields to numbers
+    if (name === 'horometer' || name === 'appliedIntervalHours') {
+      // Allow empty string during typing, store as undefined to distinguish from 0
+      const numValue = value === '' ? undefined : parseInt(value, 10);
+      setFormData(prev => ({ ...prev, [name]: numValue }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
     }
+  };
+
+  const validateNumberField = (value: number | undefined, fieldName: string): string | null => {
+    if (value === undefined || value === null) {
+      return `${fieldName} es obligatorio`;
+    }
+    if (!Number.isFinite(value)) {
+      return `${fieldName} debe ser un número finito`;
+    }
+    if (!Number.isInteger(value)) {
+      return `${fieldName} debe ser un número entero`;
+    }
+    return null;
   };
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
     if (!formData.code.trim()) newErrors.code = 'El código del equipo es obligatorio';
     if (!formData.equipmentTypeId) newErrors.equipmentTypeId = 'El tipo de equipo es obligatorio';
-    if (formData.horometer < 0) newErrors.horometer = 'El horómetro no puede ser negativo';
-    if (!formData.appliedIntervalHours || parseInt(formData.appliedIntervalHours) <= 0) {
-      newErrors.appliedIntervalHours = 'El intervalo de mantenimiento debe ser positivo';
-    }
+
+    const horometerError = validateNumberField(formData.horometer, 'Horómetro');
+    if (horometerError) newErrors.horometer = horometerError;
+    else if (formData.horometer < 0) newErrors.horometer = 'El horómetro no puede ser negativo';
+
+    const intervalError = validateNumberField(formData.appliedIntervalHours, 'Intervalo de mantenimiento');
+    if (intervalError) newErrors.appliedIntervalHours = intervalError;
+    else if (formData.appliedIntervalHours <= 0) newErrors.appliedIntervalHours = 'El intervalo de mantenimiento debe ser positivo';
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -60,10 +105,10 @@ export function EquipmentForm({
 
     try {
       await onSubmit({
-        code: formData.code,
+        code: formData.code.trim(),
         equipmentTypeId: formData.equipmentTypeId,
-        horometer: formData.horometer,
-        appliedIntervalHours: parseInt(formData.appliedIntervalHours),
+        horometer: formData.horometer as number,
+        appliedIntervalHours: formData.appliedIntervalHours as number,
       });
       onClose();
     } catch (error) {
@@ -72,6 +117,16 @@ export function EquipmentForm({
   };
 
   const selectedType = equipmentTypes.find(t => t.id === formData.equipmentTypeId);
+
+  // Auto-fill appliedIntervalHours when equipment type changes (only in creation mode)
+  useEffect(() => {
+    if (selectedType && !isEditing) {
+      setFormData(prev => ({
+        ...prev,
+        appliedIntervalHours: selectedType.maintenanceIntervalHours,
+      }));
+    }
+  }, [formData.equipmentTypeId, isEditing]);
 
   return (
     <Dialog
@@ -106,7 +161,7 @@ export function EquipmentForm({
             type="number"
             label="Horómetro Actual"
             name="horometer"
-            value={formData.horometer}
+            value={formData.horometer ?? ''}
             onChange={handleChange}
             error={errors.horometer}
             min={0}
@@ -117,7 +172,7 @@ export function EquipmentForm({
             type="number"
             label="Intervalo de Mantenimiento (horas)"
             name="appliedIntervalHours"
-            value={formData.appliedIntervalHours}
+            value={formData.appliedIntervalHours ?? ''}
             onChange={handleChange}
             error={errors.appliedIntervalHours}
             min={1}
