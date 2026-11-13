@@ -1,7 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express'
 import cors from 'cors'
 import 'dotenv/config'
-import { PrismaClient } from '@prisma/client'
+import { prisma } from './lib/prisma.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import equipmentTypesRouter from './routes/equipmentTypes.js'
 import equipmentRouter from './routes/equipment.js'
@@ -9,21 +9,6 @@ import maintenanceRouter from './routes/maintenance.js'
 
 const app = express()
 const PORT = process.env.PORT ?? 3000
-
-// Initialize Prisma Client
-const prisma = new PrismaClient({
-  log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-})
-
-// Make prisma available globally for controllers
-declare global {
-  namespace Express {
-    interface Application {
-      prisma: PrismaClient
-    }
-  }
-}
-app.prisma = prisma
 
 // CORS configuration - allow restricting via FRONTEND_URL env var in production
 const corsOptions = {

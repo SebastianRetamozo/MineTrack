@@ -1,9 +1,7 @@
 import { Request, Response } from 'express'
-import { PrismaClient } from '@prisma/client'
 import { AppError, asyncHandler } from '../middleware/errorHandler.js'
 import { createEquipmentSchema, updateEquipmentSchema, equipmentIdParamSchema, paginationSchema } from '../utils/validation.js'
-
-const prisma = new PrismaClient()
+import { prisma } from '../lib/prisma.js'
 
 function calculateMaintenanceProgress(equipment: any) {
   const hoursSinceMaintenance = equipment.horometer - equipment.lastMaintenanceHorometer

@@ -1,9 +1,7 @@
 import { Request, Response } from 'express'
-import { PrismaClient } from '@prisma/client'
 import { AppError, asyncHandler } from '../middleware/errorHandler.js'
 import { createEquipmentTypeSchema, updateEquipmentTypeSchema, paginationSchema } from '../utils/validation.js'
-
-const prisma = new PrismaClient()
+import { prisma } from '../lib/prisma.js'
 
 export const getEquipmentTypes = asyncHandler(async (req: Request, res: Response) => {
   const { page, limit } = paginationSchema.parse(req.query)
