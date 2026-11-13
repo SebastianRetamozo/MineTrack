@@ -1,408 +1,135 @@
 # MineTrack
 
-A monorepo for the MineTrack application.
+MineTrack es una aplicación web para organizar equipos mineros y dar seguimiento a sus ciclos de mantenimiento. Permite mantener un catálogo de tipos de equipo, registrar equipos y horómetros, consultar el avance hacia el próximo mantenimiento y conservar un historial de mantenimientos.
 
-## Structure
+## Enlaces
 
+- **Aplicación web:** [frontend en Vercel](https://frontend-five-pied-58.vercel.app)
+- **API:** [backend en Railway](https://minetrackbackend-production.up.railway.app)
+- **Estado del backend:** [GET /health](https://minetrackbackend-production.up.railway.app/health)
+- **Repositorio:** [SebastianRetamozo/MineTrack](https://github.com/SebastianRetamozo/MineTrack)
+
+## Funcionalidades
+
+- Administrar tipos de equipo y sus intervalos de mantenimiento predeterminados.
+- Crear, editar, consultar, filtrar y eliminar equipos.
+- Registrar lecturas de horómetro y calcular el progreso del ciclo de mantenimiento.
+- Registrar mantenimientos y consultar su historial por equipo o fecha.
+- Consultar en el panel principal el resumen de equipos, los equipos que requieren atención y los registros recientes.
+
+El panel clasifica como próximo el mantenimiento cuando el progreso alcanza el 80 %; el backend marca el mantenimiento como requerido al alcanzar o superar el intervalo aplicado.
+
+## Stack y arquitectura
+
+| Capa | Tecnologías |
+|---|---|
+| Frontend | React 18, TypeScript, Vite, React Router, TanStack Query, Axios y Tailwind CSS |
+| Backend | Node.js 20+, TypeScript, Express y Zod |
+| Persistencia | Prisma ORM y PostgreSQL |
+| Organización | Monorepo con workspaces de npm: `apps/frontend` y `apps/backend` |
+
+El frontend es una SPA independiente y consume la API REST del backend. El backend concentra las rutas, controladores, validaciones y acceso a PostgreSQL mediante Prisma. El esquema y las migraciones existentes están en `apps/backend/prisma/`.
+
+```text
+apps/
+  frontend/   React, páginas, componentes, hooks y cliente HTTP
+  backend/    Express, API, Prisma y lógica de dominio
+docs/          Arquitectura, API, pruebas y uso de IA
+package.json   Workspaces y comandos del monorepo
 ```
-minetrack/
-├── apps/
-│   ├── frontend/     # React + Vite + TypeScript
-│   └── backend/      # Node.js + Express + TypeScript + Prisma
-├── scripts/          # Utility scripts
-├── docs/             # Documentation
-├── package.json      # Root workspace configuration
-└── .env.example      # Environment variables template
-```
 
-## Prerequisites
+Consulta [Arquitectura](./docs/ARCHITECTURE.md) y [API](./docs/API.md) para más detalle.
 
-- Node.js >= 20.0.0
-- npm >= 10.0.0
-- Supabase PostgreSQL database (cloud instance)
+## Requisitos
 
-## Installation
+- Node.js **20 o superior** (requisito declarado en `package.json`).
+- npm.
+- Una base de datos PostgreSQL accesible para el backend. El esquema Prisma usa las variables `DATABASE_URL` y `DIRECT_URL`.
+
+## Instalación y configuración local
+
+Desde la raíz del repositorio, instala las dependencias de ambos workspaces:
 
 ```bash
-# Install all dependencies
-npm run install:all
-
-# Copy environment template
-cp .env.example .env
-
-# Edit .env with your Supabase credentials (see below)
+npm install
 ```
 
-### Supabase Database Setup
+Copia la plantilla de variables para el backend y completa las conexiones de PostgreSQL con valores propios:
 
-1. Create a Supabase project at https://supabase.com
-2. Go to **Settings > Database** in your Supabase dashboard
-3. Copy the connection strings:
-   - **DATABASE_URL** (Connection pooling / PgBouncer): Use for application connections
-   - **DIRECT_URL** (Direct connection): Use for migrations
-4. Paste them into your `.env` file
+```powershell
+Copy-Item .env.example apps\backend\.env
+```
 
-Example `.env`:
+En macOS/Linux:
+
+```bash
+cp .env.example apps/backend/.env
+```
+
+Para desarrollo local, el frontend usa el proxy de Vite. Crea `apps/frontend/.env` con:
+
 ```env
-DATABASE_URL="<YOUR_DATABASE_URL>"
-DIRECT_URL="<YOUR_DIRECT_URL>"
+VITE_API_URL=/api
 ```
 
-## Database Commands
+El proxy reenvía `/api` a `http://localhost:3000`. Si `VITE_API_URL` no se define, el cliente también usa `/api` por defecto.
+
+> **Nota sobre la plantilla:** el `.env.example` raíz contiene `VITE_API_URL=http://localhost:3000`. El frontend requiere una base que incluya el prefijo `/api`; para usar el proxy local, establece `VITE_API_URL=/api` en `apps/frontend/.env`. No copies valores reales de conexión a documentación ni al repositorio.
+
+### Variables de entorno
+
+| Variable | Dónde se usa | Descripción |
+|---|---|---|
+| `DATABASE_URL` | Backend / Prisma | URL de conexión de la aplicación a PostgreSQL. |
+| `DIRECT_URL` | Backend / Prisma | URL de conexión directa utilizada por Prisma para tareas como migraciones. |
+| `PORT` | Backend | Puerto HTTP; el valor predeterminado en el código es `3000`. |
+| `NODE_ENV` | Backend | Controla el nivel de logs de Prisma; el código habilita logs de consultas en `development`. |
+| `FRONTEND_URL` | Backend | Opcional. Origen u orígenes permitidos por CORS, separados por comas. Si no se define, Express CORS permite cualquier origen. |
+| `VITE_API_URL` | Frontend | URL base de la API. Local con proxy: `/api`. Despliegue actual: `https://minetrackbackend-production.up.railway.app/api`. |
+
+Las variables con credenciales deben permanecer en archivos `.env` locales o en el gestor de variables del proveedor. Git ignora estos archivos, excepto `.env.example`.
+
+En Vercel, configura `VITE_API_URL` con el valor indicado en la tabla. Vite incorpora esta variable durante el build del frontend. Si Railway limita CORS mediante `FRONTEND_URL`, configura allí el origen de Vercel: `https://frontend-five-pied-58.vercel.app`.
+
+## Desarrollo
+
+Desde la raíz:
 
 ```bash
-# Generate Prisma Client (run after schema changes)
-npm run prisma:generate --workspace=apps/backend
-
-# Create and apply a new migration (development)
-npm run prisma:migrate --workspace=apps/backend
-
-# Apply pending migrations (production)
-npm run prisma:migrate:deploy --workspace=apps/backend
-
-# Open Prisma Studio (database GUI)
-npm run prisma:studio --workspace=apps/backend
-
-# Push schema changes without migration (development only)
-npm run prisma:db:push --workspace=apps/backend
-```
-
-## Development
-
-```bash
-# Start both frontend and backend in development mode
+# Frontend y backend
 npm run dev
 
-# Start only frontend (port 5173)
+# Solo frontend (Vite, puerto 5173)
 npm run dev:frontend
 
-# Start only backend (port 3000)
+# Solo backend (Express, puerto predeterminado 3000)
 npm run dev:backend
 ```
 
-## Building
+El backend expone `GET /health` y la API bajo `/api`. La documentación de rutas está en [docs/API.md](./docs/API.md).
+
+## Build y comprobaciones estáticas
 
 ```bash
-# Build both applications
+# Build de todos los workspaces
 npm run build
 
-# Build only frontend
+# Builds individuales
 npm run build:frontend
-
-# Build only backend
 npm run build:backend
+
+# TypeScript en ambos workspaces
+npm run typecheck
 ```
 
-## Production
+El build del backend genera el cliente Prisma y compila TypeScript; el del frontend ejecuta `tsc` y `vite build`. Estos comandos no sustituyen pruebas funcionales manuales. Consulta [docs/TESTING.md](./docs/TESTING.md).
 
-```bash
-# Build and start backend
-npm run build
-npm run start
+Para iniciar el backend compilado: `npm run start`. `npm run start:frontend` ejecuta `vite preview` para previsualizar localmente un build, no sustituye el hosting de producción.
 
-# Build and preview frontend
-npm run build:frontend
-npm run start:frontend
-```
+## Documentación
 
-## Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| PORT | Backend server port | 3000 |
-| NODE_ENV | Environment mode | development |
-| DATABASE_URL | Supabase pooled connection string (PgBouncer) | - |
-| DIRECT_URL | Supabase direct connection string | - |
-| VITE_API_URL | Frontend API base URL | http://localhost:3000 |
-
-## Health Check
-
-Backend health endpoint: `GET /health`
-
-Response (healthy):
-```json
-{
-  "status": "ok",
-  "timestamp": "2026-11-12T12:00:00.000Z",
-  "uptime": 123.45,
-  "environment": "development",
-  "database": {
-    "connected": true,
-    "latency": 45
-  }
-}
-```
-
-Response (degraded - database unreachable):
-```json
-{
-  "status": "degraded",
-  "timestamp": "2026-11-12T12:00:00.000Z",
-  "uptime": 123.45,
-  "environment": "development",
-  "database": {
-    "connected": false,
-    "error": "Can't reach database server at ..."
-  }
-}
-```
-
-- Returns `200 OK` when database is connected
-- Returns `503 Service Unavailable` when database is unreachable
-
-## API Reference
-
-Base URL: `http://localhost:3000/api`
-
-### Equipment Types
-
-#### GET `/equipment-types`
-List all equipment types with pagination.
-
-**Query Parameters:**
-- `page` (number, default: 1)
-- `limit` (number, default: 20, max: 100)
-
-**Response:**
-```json
-{
-  "data": [
-    {
-      "id": "uuid",
-      "name": "Truck",
-      "maintenanceIntervalHours": 250,
-      "createdAt": "2026-11-12T...",
-      "updatedAt": "2026-11-12T...",
-      "_count": { "equipment": 5 }
-    }
-  ],
-  "pagination": { "page": 1, "limit": 20, "total": 3, "totalPages": 1 }
-}
-```
-
-#### GET `/equipment-types/:id`
-Get equipment type by ID with associated equipment.
-
-#### POST `/equipment-types`
-Create a new equipment type.
-
-**Body:**
-```json
-{
-  "name": "Truck",
-  "maintenanceIntervalHours": 250
-}
-```
-
-#### PUT `/equipment-types/:id`
-Update an equipment type.
-
-#### DELETE `/equipment-types/:id`
-Delete an equipment type (fails if equipment exists).
-
----
-
-### Equipment
-
-#### GET `/equipment`
-List all equipment with pagination and maintenance progress.
-
-**Query Parameters:**
-- `page` (number, default: 1)
-- `limit` (number, default: 20, max: 100)
-- `equipmentTypeId` (UUID) - Filter by equipment type
-- `status` (string) - Filter by status
-- `maintenanceRequired` (boolean) - Filter by maintenance status
-
-**Response includes `maintenanceProgress`:**
-```json
-{
-  "data": [{
-    "id": "uuid",
-    "code": "TRK-001",
-    "equipmentTypeId": "uuid",
-    "horometer": 100,
-    "lastMaintenanceHorometer": 100,
-    "appliedIntervalHours": 250,
-    "equipmentType": { "id": "...", "name": "Truck", "maintenanceIntervalHours": 250 },
-    "maintenanceProgress": {
-      "hoursSinceMaintenance": 0,
-      "progress": 0,
-      "maintenanceRequired": false
-    }
-  }],
-  "pagination": { ... }
-}
-```
-
-#### GET `/equipment/:id`
-Get equipment by ID with maintenance history (last 10 records).
-
-#### POST `/equipment`
-Create new equipment.
-
-**Body:**
-```json
-{
-  "code": "TRK-001",
-  "equipmentTypeId": "uuid",
-  "horometer": 100,
-  "appliedIntervalHours": 250  // Optional: defaults to equipment type's interval
-}
-```
-
-**Validation:**
-- `code` must be unique
-- `equipmentTypeId` must exist
-- `horometer` must be non-negative
-- `appliedIntervalHours` must be positive
-
-#### PUT `/equipment/:id`
-Update equipment.
-
-**Body (all optional):**
-```json
-{
-  "code": "TRK-002",
-  "equipmentTypeId": "uuid",
-  "horometer": 200,
-  "appliedIntervalHours": 300
-}
-```
-
-**Validation:**
-- Horometer cannot decrease
-- Equipment type must exist if changed
-
-#### DELETE `/equipment/:id`
-Delete equipment (cascades to maintenance records).
-
----
-
-### Maintenance
-
-#### GET `/maintenance`
-List all maintenance records with pagination.
-
-**Query Parameters:**
-- `page` (number, default: 1)
-- `limit` (number, default: 20, max: 100)
-- `equipmentId` (UUID) - Filter by equipment
-- `startDate` (ISO date) - Filter by date range start
-- `endDate` (ISO date) - Filter by date range end
-
-#### GET `/maintenance/equipment/:id`
-Get maintenance history for specific equipment.
-
-#### POST `/maintenance/equipment/:id`
-Register maintenance for equipment (uses database transaction).
-
-**Body:**
-```json
-{
-  "horometerAtMaintenance": 350,
-  "description": "Oil change and filter replacement"
-}
-```
-
-**Business Rules (enforced):**
-1. `horometerAtMaintenance` >= current equipment horometer
-2. `horometerAtMaintenance` >= last maintenance horometer
-3. On success:
-   - Creates maintenance record
-   - Updates equipment `horometer` = `horometerAtMaintenance`
-   - Updates `lastMaintenanceHorometer` = `horometerAtMaintenance`
-   - Updates `appliedIntervalHours` = equipment type's current `maintenanceIntervalHours`
-   - Total horometer is preserved (updated to maintenance reading)
-
-**Response:**
-```json
-{
-  "maintenance": { ... },
-  "equipment": {
-    ...,
-    "maintenanceProgress": {
-      "hoursSinceMaintenance": 0,
-      "progress": 0,
-      "maintenanceRequired": false
-    }
-  }
-}
-```
-
----
-
-### Business Rules Summary
-
-1. **Horometer**: Never decreases through normal updates
-2. **Maintenance Progress**: `hoursSinceMaintenance = horometer - lastMaintenanceHorometer`
-3. **Progress %**: `hoursSinceMaintenance / appliedIntervalHours * 100`
-4. **Maintenance Required**: When `hoursSinceMaintenance >= appliedIntervalHours`
-5. **Maintenance Registration** (transactional):
-   - Records current horometer
-   - Creates history entry
-   - Updates `lastMaintenanceHorometer`
-   - Updates `appliedIntervalHours` to equipment type's current default
-   - Preserves total horometer
-6. **Applied Interval**: Retained throughout maintenance cycle; updated only on maintenance registration
-7. **Duplicate Codes**: Prevented at database level (unique constraint)
-8. **Invalid Values**: Validated at API level
-
----
-
-### Error Responses
-
-All errors follow consistent format:
-```json
-{
-  "error": "Human readable message",
-  "code": "ERROR_CODE",
-  "details": {}
-}
-```
-
-| Code | HTTP Status | Description |
-|------|-------------|-------------|
-| `VALIDATION_ERROR` | 400 | Request validation failed |
-| `BAD_REQUEST` | 400 | Business rule violation |
-| `NOT_FOUND` | 404 | Resource not found |
-| `CONFLICT` | 409 | Duplicate unique field |
-| `INTERNAL_ERROR` | 500 | Server error |
-
----
-
-### Initial Equipment Types (Seeded)
-
-| Type | Maintenance Interval |
-|------|---------------------|
-| Truck | 250 hours |
-| Excavator | 500 hours |
-| Drilling Machine | 300 hours |
-
-> **Note**: These intervals are illustrative demo values and not actual manufacturer recommendations.
-
----
-
-## Tests
-
-Run the test suite:
-```bash
-cd apps/backend && npx tsx scripts/test-api.ts
-```
-
-Tests cover:
-- ✅ Equipment creation
-- ✅ Unique equipment code enforcement
-- ✅ Horometer validation (no decrease)
-- ✅ Maintenance threshold calculation
-- ✅ Maintenance registration
-- ✅ Horometer preservation after maintenance
-- ✅ Applied interval update after maintenance
-- ✅ Maintenance history queries
-- ✅ Filter by maintenance required
-
----
-
-## License
-
-Private
+- [Arquitectura](./docs/ARCHITECTURE.md)
+- [API REST](./docs/API.md)
+- [Pruebas y verificación](./docs/TESTING.md)
+- [Uso de IA](./docs/AI_USAGE.md)
+- [Esquema Prisma](./apps/backend/prisma/schema.prisma)
