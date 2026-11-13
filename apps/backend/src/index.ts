@@ -25,8 +25,12 @@ declare global {
 }
 app.prisma = prisma
 
-// Middleware
-app.use(cors())
+// CORS configuration - allow restricting via FRONTEND_URL env var in production
+const corsOptions = {
+  origin: process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',') : true,
+  credentials: true,
+}
+app.use(cors(corsOptions))
 app.use(express.json())
 
 // Request logging
