@@ -1,6 +1,11 @@
 import { Request, Response } from 'express'
 import { AppError, asyncHandler } from '../middleware/errorHandler.js'
-import { createEquipmentSchema, updateEquipmentSchema, equipmentIdParamSchema, paginationSchema } from '../utils/validation.js'
+import {
+  createEquipmentSchema,
+  updateEquipmentSchema,
+  equipmentIdParamSchema,
+  equipmentListQuerySchema,
+} from '../utils/validation.js'
 import { prisma } from '../lib/prisma.js'
 
 function calculateMaintenanceProgress(equipment: any) {
@@ -18,50 +23,56 @@ function calculateMaintenanceProgress(equipment: any) {
 }
 
 export const getEquipment = asyncHandler(async (req: Request, res: Response) => {
-  const { page, limit } = paginationSchema.parse(req.query)
-  const { equipmentTypeId, status, maintenanceRequired } = req.query
-  const skip = (page - 1) * limit
+  const { page, limit, equipmentTypeId, search, status, maintenanceRequired } =
+    equipmentListQuerySchema.parse(req.query)
 
   const where: any = {}
   if (equipmentTypeId) where.equipmentTypeId = equipmentTypeId
-  if (status) where.status = status
+  if (search) where.code = { contains: search, mode: 'insensitive' }
 
-  const [equipment, total] = await Promise.all([
-    prisma.equipment.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        equipmentType: {
-          select: { id: true, name: true, maintenanceIntervalHours: true },
-        },
+  const equipment = await prisma.equipment.findMany({
+    where,
+    orderBy: { createdAt: 'desc' },
+    include: {
+      equipmentType: {
+        select: { id: true, name: true, maintenanceIntervalHours: true },
       },
-    }),
-    prisma.equipment.count({ where }),
-  ])
+    },
+  })
 
-  // Add maintenance progress info
   const equipmentWithProgress = equipment.map(eq => ({
     ...eq,
     maintenanceProgress: calculateMaintenanceProgress(eq),
   }))
 
-  // Filter by maintenanceRequired if specified
   let filtered = equipmentWithProgress
   if (maintenanceRequired === 'true') {
     filtered = equipmentWithProgress.filter(eq => eq.maintenanceProgress.maintenanceRequired)
   } else if (maintenanceRequired === 'false') {
     filtered = equipmentWithProgress.filter(eq => !eq.maintenanceProgress.maintenanceRequired)
   }
+  if (status === 'required') {
+    filtered = filtered.filter(eq => eq.maintenanceProgress.maintenanceRequired)
+  } else if (status === 'soon') {
+    filtered = filtered.filter(
+      eq => !eq.maintenanceProgress.maintenanceRequired && eq.maintenanceProgress.progress >= 80,
+    )
+  } else if (status === 'normal') {
+    filtered = filtered.filter(
+      eq => !eq.maintenanceProgress.maintenanceRequired && eq.maintenanceProgress.progress < 80,
+    )
+  }
+
+  const total = filtered.length
+  const skip = (page - 1) * limit
 
   res.json({
-    data: filtered,
+    data: filtered.slice(skip, skip + limit),
     pagination: {
       page,
       limit,
-      total: filtered.length,
-      totalPages: Math.ceil(filtered.length / limit),
+      total,
+      totalPages: Math.ceil(total / limit),
     },
   })
 })

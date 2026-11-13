@@ -83,7 +83,7 @@ El proxy reenvía `/api` a `http://localhost:3000`. Si `VITE_API_URL` no se defi
 | `DATABASE_URL` | Backend / Prisma | URL de conexión de la aplicación a PostgreSQL. |
 | `DIRECT_URL` | Backend / Prisma | URL de conexión directa utilizada por Prisma para tareas como migraciones. |
 | `PORT` | Backend | Puerto HTTP; el valor predeterminado en el código es `3000`. |
-| `NODE_ENV` | Backend | Controla el nivel de logs de Prisma; el código habilita logs de consultas en `development`. |
+| `NODE_ENV` | Backend | Indica el entorno de ejecución; Prisma no emite logs nativos de consultas ni de conexión. |
 | `FRONTEND_URL` | Backend | Opcional. Origen u orígenes permitidos por CORS, separados por comas. Si no se define, Express CORS permite cualquier origen. |
 | `VITE_API_URL` | Frontend | URL base de la API. Local con proxy: `/api`. Despliegue actual: `https://minetrackbackend-production.up.railway.app/api`. |
 
@@ -131,5 +131,6 @@ Para iniciar el backend compilado: `npm run start`. `npm run start:frontend` eje
 - [Arquitectura](./docs/ARCHITECTURE.md)
 - [API REST](./docs/API.md)
 - [Pruebas y verificación](./docs/TESTING.md)
+- [Despliegue automatizado](./docs/DEPLOYMENT.md)
 - [Uso de IA](./docs/AI_USAGE.md)
 - [Esquema Prisma](./apps/backend/prisma/schema.prisma)

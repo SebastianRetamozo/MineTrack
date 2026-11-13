@@ -1,11 +1,14 @@
-import { Request, Response, NextFunction } from 'express'
+import { Prisma } from '@prisma/client'
+import type { NextFunction, Request, RequestHandler, Response } from 'express'
+import { ZodError } from 'zod'
+import { logServerError } from './requestLogger.js'
 
 export class AppError extends Error {
   constructor(
     public statusCode: number,
     public message: string,
     public code?: string,
-    public details?: unknown
+    public details?: unknown,
   ) {
     super(message)
     Object.setPrototypeOf(this, AppError.prototype)
@@ -28,65 +31,99 @@ export class AppError extends Error {
   }
 }
 
-interface ZodError extends Error {
-  errors: any[]
+function isClientRequestError(error: unknown): error is Error & { status: number } {
+  if (typeof error !== 'object' || error === null || !('status' in error)) return false
+  const status = error.status
+  return typeof status === 'number' && status >= 400 && status < 500
 }
 
-export function errorHandler(err: Error, _req: Request, res: Response, _next: NextFunction) {
-  console.error('Error:', err)
+function getErrorLabel(error: unknown): string {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    return `Prisma code=${error.code}`
+  }
+  if (error instanceof Error) return error.name || 'Error'
+  return 'UnknownError'
+}
 
-  if (err instanceof AppError) {
-    return res.status(err.statusCode).json({
-      error: err.message,
-      code: err.code,
-      details: err.details,
-    })
+export function errorHandler(
+  error: unknown,
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
+  if (res.headersSent) {
+    next(error)
+    return
   }
 
-  // Prisma errors
-  if (err.name === 'PrismaClientKnownRequestError') {
-    const prismaErr = err as any
-    if (prismaErr.code === 'P2002') {
-      const field = prismaErr.meta?.target?.[0] || 'field'
-      return res.status(409).json({
-        error: `Duplicate value for ${field}`,
-        code: 'CONFLICT',
-        details: { field },
-      })
-    }
-    if (prismaErr.code === 'P2003') {
-      return res.status(400).json({
-        error: 'Foreign key constraint failed',
-        code: 'BAD_REQUEST',
-        details: prismaErr.meta,
-      })
-    }
-    if (prismaErr.code === 'P2025') {
-      return res.status(404).json({
-        error: 'Record not found',
-        code: 'NOT_FOUND',
-      })
-    }
-  }
-
-  // Validation errors (Zod)
-  if (err.name === 'ZodError') {
-    const zodErr = err as ZodError
-    return res.status(400).json({
-      error: 'Validation failed',
-      code: 'VALIDATION_ERROR',
-      details: zodErr.errors,
-    })
-  }
-
-  return res.status(500).json({
+  let statusCode = 500
+  let response: { error: string; code: string; details?: unknown } = {
     error: 'Internal server error',
     code: 'INTERNAL_ERROR',
-  })
+  }
+
+  if (error instanceof AppError) {
+    statusCode = error.statusCode
+    if (statusCode < 500) {
+      response = {
+        error: error.message,
+        code: error.code ?? 'REQUEST_ERROR',
+      }
+    }
+  } else if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    if (error.code === 'P2002') {
+      statusCode = 409
+      response = {
+        error: 'A record with the provided unique value already exists',
+        code: 'CONFLICT',
+      }
+    } else if (error.code === 'P2003') {
+      statusCode = 400
+      response = {
+        error: 'A related record is invalid or still in use',
+        code: 'BAD_REQUEST',
+      }
+    } else if (error.code === 'P2025') {
+      statusCode = 404
+      response = {
+        error: 'Record not found',
+        code: 'NOT_FOUND',
+      }
+    }
+  } else if (error instanceof ZodError) {
+    statusCode = 400
+    response = {
+      error: 'Validation failed',
+      code: 'VALIDATION_ERROR',
+      details: error.issues.map((issue) => ({
+        path: issue.path,
+        message: issue.message,
+      })),
+    }
+  } else if (isClientRequestError(error)) {
+    statusCode = error.status
+    response = statusCode === 413
+      ? { error: 'Request body is too large', code: 'PAYLOAD_TOO_LARGE' }
+      : { error: 'Invalid request', code: 'BAD_REQUEST' }
+  }
+
+  res.status(statusCode)
+  if (statusCode >= 500) {
+    logServerError(req, res, getErrorLabel(error))
+  }
+  res.json(response)
 }
 
-export function asyncHandler(fn: (req: Request, res: Response, next: NextFunction) => Promise<any>) {
-  return (req: Request, res: Response, next: NextFunction) => {
-    Promise.resolve(fn(req, res, next)).catch(next)
+type AsyncRequestHandler = (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => Promise<unknown>
+
+export function asyncHandler(handler: AsyncRequestHandler): RequestHandler {
+  return (req, res, next) => {
+    void Promise.resolve()
+      .then(() => handler(req, res, next))
+      .catch(next)
   }
 }

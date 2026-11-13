@@ -12,6 +12,10 @@ Las rutas se contrastaron con [`src/index.ts`](../apps/backend/src/index.ts), lo
 
 ## Health y metadatos
 
+### `GET /`
+
+Devuelve información básica de la API con `name`, `status` y enlaces a `/health` y `/api`.
+
 ### `GET /health`
 
 Comprueba PostgreSQL con una consulta `SELECT 1`.
@@ -78,9 +82,10 @@ Query:
 | Parámetro | Uso actual |
 |---|---|
 | `page`, `limit` | Paginación validada con Zod. |
-| `equipmentTypeId` | Filtro de tipo, se pasa a Prisma sin validación Zod explícita en esta ruta. |
-| `maintenanceRequired` | La ruta compara el texto `true` o `false` con `maintenanceProgress.maintenanceRequired`. |
-| `status` | El controlador intenta pasarlo a Prisma, pero el modelo `Equipment` no declara un campo `status`; no se debe asumir que este filtro funciona. |
+| `equipmentTypeId` | Filtra por tipo de equipo. |
+| `search` | Busca por coincidencia parcial, sin distinguir mayúsculas, en `code`. |
+| `status` | Filtro calculado: `required`, `soon` (no requerido y progreso de al menos 80 %) o `normal` (no requerido y progreso menor al 80 %). No es una columna del modelo. |
+| `maintenanceRequired` | Filtro booleano legado (`true` o `false`) sobre el estado de mantenimiento calculado. Si se combina con `status`, se aplican ambos filtros. |
 
 Devuelve `{ data, pagination }`. Cada elemento incluye el resumen de tipo seleccionado y `maintenanceProgress`:
 
@@ -92,7 +97,7 @@ Devuelve `{ data, pagination }`. Cada elemento incluye el resumen de tipo selecc
 }
 ```
 
-La lista se pagina en Prisma antes de aplicar el filtro `maintenanceRequired`; cuando se usa ese filtro, `pagination.total` refleja la longitud filtrada de esa página y no un recuento global independiente.
+Los filtros se aplican antes de paginar. `pagination.total` representa todos los resultados que cumplen los filtros, y `totalPages` se calcula sobre ese total.
 
 ### `GET /api/equipment/:id`
 
@@ -125,7 +130,7 @@ Validaciones: `code` es una cadena de 1 a 255 caracteres; `equipmentTypeId` debe
 
 ### `GET /api/maintenance`
 
-Query: `page`, `limit`, `equipmentId`, `startDate`, `endDate`. Las fechas se convierten a `Date` para filtrar `performedAt`; el controlador no valida explícitamente el formato de `equipmentId` ni de las fechas.
+Query: `page`, `limit`, `equipmentId`, `startDate`, `endDate`. Las fechas deben ser fechas de calendario válidas en formato `YYYY-MM-DD`; formatos o fechas imposibles responden `400 BAD_REQUEST`. Si se envían ambas, `startDate` no puede ser posterior a `endDate`.
 
 Devuelve `{ data, pagination }`. Cada elemento incluye una selección relacionada de equipo (`id`, `code` y nombre del tipo).
 
@@ -160,6 +165,6 @@ Las respuestas de error usan normalmente `{ error, code, details? }`. Los códig
 | `409` | `CONFLICT` | Valor duplicado para un campo único. |
 | `500` | `INTERNAL_ERROR` | Error no reconocido. |
 
-La respuesta para una ruta Express no registrada es `404` con `{ "error": "Not found" }`, sin `code`. Las respuestas `204` no contienen cuerpo.
+La respuesta para una ruta Express no registrada es `404` con `{ "error": "Not found", "code": "NOT_FOUND" }`. Las respuestas `204` no contienen cuerpo.
 
 Las reglas de traducción de errores están en [`src/middleware/errorHandler.ts`](../apps/backend/src/middleware/errorHandler.ts); las validaciones, en [`src/utils/validation.ts`](../apps/backend/src/utils/validation.ts).

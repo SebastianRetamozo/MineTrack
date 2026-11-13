@@ -8,12 +8,30 @@ export const getMaintenanceHistory = asyncHandler(async (req: Request, res: Resp
   const { equipmentId, startDate, endDate } = req.query
   const skip = (page - 1) * limit
 
+  const parseDate = (value: unknown, name: string): Date | undefined => {
+    if (value === undefined) return undefined
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      throw AppError.badRequest(`${name} must be a valid date in YYYY-MM-DD format`)
+    }
+
+    const date = new Date(`${value}T00:00:00.000Z`)
+    if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) {
+      throw AppError.badRequest(`${name} must be a valid date in YYYY-MM-DD format`)
+    }
+    return date
+  }
+  const parsedStartDate = parseDate(startDate, 'startDate')
+  const parsedEndDate = parseDate(endDate, 'endDate')
+  if (parsedStartDate && parsedEndDate && parsedStartDate > parsedEndDate) {
+    throw AppError.badRequest('startDate must be on or before endDate')
+  }
+
   const where: any = {}
   if (equipmentId) where.equipmentId = equipmentId
-  if (startDate || endDate) {
+  if (parsedStartDate || parsedEndDate) {
     where.performedAt = {}
-    if (startDate) where.performedAt.gte = new Date(startDate as string)
-    if (endDate) where.performedAt.lte = new Date(endDate as string)
+    if (parsedStartDate) where.performedAt.gte = parsedStartDate
+    if (parsedEndDate) where.performedAt.lte = parsedEndDate
   }
 
   const [maintenance, total] = await Promise.all([

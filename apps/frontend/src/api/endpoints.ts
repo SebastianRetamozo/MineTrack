@@ -15,7 +15,8 @@ export interface EquipmentListParams {
   page?: number;
   limit?: number;
   equipmentTypeId?: string;
-  status?: string;
+  search?: string;
+  status?: 'required' | 'soon' | 'normal';
   maintenanceRequired?: boolean;
 }
 

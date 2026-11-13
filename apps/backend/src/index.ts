@@ -1,8 +1,9 @@
-import express, { Request, Response, NextFunction } from 'express'
+import express from 'express'
 import cors from 'cors'
 import 'dotenv/config'
 import { prisma } from './lib/prisma.js'
-import { errorHandler } from './middleware/errorHandler.js'
+import { asyncHandler, errorHandler } from './middleware/errorHandler.js'
+import { requestLogger } from './middleware/requestLogger.js'
 import equipmentTypesRouter from './routes/equipmentTypes.js'
 import equipmentRouter from './routes/equipment.js'
 import maintenanceRouter from './routes/maintenance.js'
@@ -16,27 +17,48 @@ const corsOptions = {
   credentials: true,
 }
 app.use(cors(corsOptions))
+app.use(requestLogger)
 app.use(express.json())
 
-// Request logging
-app.use((req: Request, _res: Response, next: NextFunction) => {
-  console.log(`${new Date().toISOString()} ${req.method} ${req.path}`)
-  next()
-})
-
-// Database connection check
-async function checkDatabaseConnection(): Promise<{ connected: boolean; latency?: number; error?: string }> {
-  const start = Date.now()
-  try {
-    await prisma.$queryRaw`SELECT 1`
-    return { connected: true, latency: Date.now() - start }
-  } catch (error) {
-    return { connected: false, error: error instanceof Error ? error.message : 'Unknown error' }
+let lastDatabaseConnectionStatus: boolean | undefined
+function logDatabaseConnectionStatus(connected: boolean): void {
+  if (lastDatabaseConnectionStatus === connected) return
+  lastDatabaseConnectionStatus = connected
+  if (connected) {
+    console.info('[database] PostgreSQL connected')
+  } else {
+    console.error('[database] PostgreSQL connection failed')
   }
 }
 
-// Health check endpoint
-app.get('/health', async (_req: Request, res: Response) => {
+async function checkDatabaseConnection(): Promise<{
+  connected: boolean
+  latency?: number
+  error?: string
+}> {
+  const start = Date.now()
+  try {
+    await prisma.$queryRaw`SELECT 1`
+    logDatabaseConnectionStatus(true)
+    return { connected: true, latency: Date.now() - start }
+  } catch {
+    logDatabaseConnectionStatus(false)
+    return { connected: false, error: 'Database connection unavailable' }
+  }
+}
+
+app.get('/', (_req, res) => {
+  res.json({
+    name: 'MineTrack API',
+    status: 'running',
+    endpoints: {
+      health: '/health',
+      api: '/api',
+    },
+  })
+})
+
+app.get('/health', asyncHandler(async (_req, res) => {
   const dbStatus = await checkDatabaseConnection()
 
   const health = {
@@ -53,10 +75,10 @@ app.get('/health', async (_req: Request, res: Response) => {
 
   const statusCode = dbStatus.connected ? 200 : 503
   res.status(statusCode).json(health)
-})
+}))
 
 // API routes
-app.get('/api', (_req: Request, res: Response) => {
+app.get('/api', (_req, res) => {
   res.json({
     name: 'MineTrack API',
     version: '1.0.0',
@@ -68,28 +90,67 @@ app.use('/api/equipment-types', equipmentTypesRouter)
 app.use('/api/equipment', equipmentRouter)
 app.use('/api/maintenance', maintenanceRouter)
 
-// 404 handler
-app.use((_req: Request, res: Response) => {
-  res.status(404).json({ error: 'Not found' })
+app.use((_req, res) => {
+  res.status(404).json({
+    error: 'Not found',
+    code: 'NOT_FOUND',
+  })
 })
 
-// Error handler
 app.use(errorHandler)
 
-// Graceful shutdown
-async function shutdown() {
-  console.log('Shutting down...')
-  await prisma.$disconnect()
-  process.exit(0)
+const server = app.listen(PORT, () => {
+  const address = server.address()
+  const port = typeof address === 'object' && address ? address.port : PORT
+  console.info(`[server] listening port=${port}`)
+  void checkDatabaseConnection()
+})
+
+server.on('error', (error: NodeJS.ErrnoException) => {
+  console.error(`[server] listen failed code=${error.code ?? 'unknown'}`)
+  process.exitCode = 1
+  void prisma.$disconnect().catch(() => {
+    console.error('[database] Prisma disconnect failed')
+  })
+})
+
+let shuttingDown = false
+async function shutdown(signal: string): Promise<void> {
+  if (shuttingDown) return
+  shuttingDown = true
+  console.info(`[server] shutting down signal=${signal}`)
+
+  await new Promise<void>((resolveShutdown) => {
+    server.close((error) => {
+      if (error) {
+        console.error(`[server] close failed type=${error.name}`)
+        process.exitCode = 1
+      }
+      resolveShutdown()
+    })
+  })
+
+  try {
+    await prisma.$disconnect()
+    console.info('[database] Prisma disconnected')
+  } catch {
+    console.error('[database] Prisma disconnect failed')
+    process.exitCode = 1
+  }
 }
 
-process.on('SIGINT', shutdown)
-process.on('SIGTERM', shutdown)
+process.on('SIGINT', () => {
+  void shutdown('SIGINT').catch(() => {
+    console.error('[server] graceful shutdown failed')
+    process.exitCode = 1
+  })
+})
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`)
-  console.log(`Health check: http://localhost:${PORT}/health`)
+process.on('SIGTERM', () => {
+  void shutdown('SIGTERM').catch(() => {
+    console.error('[server] graceful shutdown failed')
+    process.exitCode = 1
+  })
 })
 
 export default app

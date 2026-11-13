@@ -16,7 +16,8 @@
     "start": "npm run start --workspace=apps/backend",
     "start:frontend": "npm run preview --workspace=apps/frontend",
     "lint": "npm run lint --workspaces",
-    "typecheck": "npm run typecheck --workspaces"
+    "typecheck": "npm run typecheck --workspaces",
+    "deploy": "node scripts/deploy.mjs"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

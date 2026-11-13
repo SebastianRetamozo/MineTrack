@@ -37,3 +37,10 @@ export const paginationSchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(20),
 })
+
+export const equipmentListQuerySchema = paginationSchema.extend({
+  equipmentTypeId: z.string().uuid().optional(),
+  search: z.string().trim().max(255).optional(),
+  status: z.enum(['required', 'soon', 'normal']).optional(),
+  maintenanceRequired: z.enum(['true', 'false']).optional(),
+})

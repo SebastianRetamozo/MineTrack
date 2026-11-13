@@ -26,7 +26,8 @@ export function EquipmentPage() {
     page,
     limit: 20,
     equipmentTypeId: typeFilter || undefined,
-    maintenanceRequired: maintenanceFilter === 'required' ? true : maintenanceFilter === 'normal' ? false : undefined,
+    search: search.trim() || undefined,
+    status: maintenanceFilter === 'all' ? undefined : maintenanceFilter,
   });
 
   const createMutation = useCreateEquipment();
@@ -35,13 +36,6 @@ export function EquipmentPage() {
 
   const equipment = equipmentData?.data || [];
   const pagination = equipmentData?.pagination;
-
-  const filteredEquipment = equipment.filter(item => {
-    if (search && !item.code.toLowerCase().includes(search.toLowerCase())) {
-      return false;
-    }
-    return true;
-  });
 
   const handleCreate = async (formData: { code: string; equipmentTypeId: string; horometer: number; appliedIntervalHours: number }) => {
     await createMutation.mutateAsync({
@@ -128,7 +122,7 @@ export function EquipmentPage() {
             <div>
               <p className="stat-label">Requiere Mantenimiento</p>
               <p className="stat-value text-danger-600">
-                {filteredEquipment.filter(e => e.maintenanceProgress?.maintenanceRequired).length}
+                {equipment.filter(e => e.maintenanceProgress?.maintenanceRequired).length}
               </p>
             </div>
           </div>
@@ -141,7 +135,7 @@ export function EquipmentPage() {
             <div>
               <p className="stat-label">Mantenimiento Pronto</p>
               <p className="stat-value text-warning-600">
-                {filteredEquipment.filter(e => e.maintenanceProgress && !e.maintenanceProgress.maintenanceRequired && e.maintenanceProgress.progress >= 80).length}
+                {equipment.filter(e => e.maintenanceProgress && !e.maintenanceProgress.maintenanceRequired && e.maintenanceProgress.progress >= 80).length}
               </p>
             </div>
           </div>
@@ -154,7 +148,7 @@ export function EquipmentPage() {
             <div>
               <p className="stat-label">Ciclo Normal</p>
               <p className="stat-value text-success-600">
-                {filteredEquipment.filter(e => e.maintenanceProgress && !e.maintenanceProgress.maintenanceRequired && e.maintenanceProgress.progress < 80).length}
+                {equipment.filter(e => e.maintenanceProgress && !e.maintenanceProgress.maintenanceRequired && e.maintenanceProgress.progress < 80).length}
               </p>
             </div>
           </div>
@@ -168,13 +162,19 @@ export function EquipmentPage() {
             <Input
               placeholder="Buscar por código de equipo..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
             />
           </div>
           <div className="flex gap-3 flex-wrap">
             <Select
               value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
+              onChange={(e) => {
+                setTypeFilter(e.target.value);
+                setPage(1);
+              }}
               options={[
                 { value: '', label: 'Todos los Tipos' },
                 ...equipmentTypes.map(t => ({ value: t.id, label: t.name })),
@@ -184,7 +184,10 @@ export function EquipmentPage() {
             />
             <Select
               value={maintenanceFilter}
-              onChange={(e) => setMaintenanceFilter(e.target.value as typeof maintenanceFilter)}
+              onChange={(e) => {
+                setMaintenanceFilter(e.target.value as typeof maintenanceFilter);
+                setPage(1);
+              }}
               options={[
                 { value: 'all', label: 'Todos los Estados' },
                 { value: 'required', label: 'Requiere Mantenimiento' },
@@ -200,7 +203,7 @@ export function EquipmentPage() {
       {/* Equipment Table */}
       <div className="card">
         <EquipmentTable
-          equipment={filteredEquipment}
+          equipment={equipment}
           equipmentTypes={equipmentTypes}
           isLoading={isLoading}
           onView={openDetail}
